@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <fstream>
 #include <psapi.h>
+#include <cstring>
+#include <vector>
 
 namespace rbx::off {
 
@@ -137,14 +139,103 @@ static uintptr_t TrySigFamily(uintptr_t textBase, size_t textSize, const char* c
     return 0;
 }
 
+// Quick pre-filter: does *inst* smell like an Instance? Looks for a sane
+// shared_ptr<vector<shared_ptr<Instance>>> at any of the usual Children offsets.
+static bool LooksLikeInstance(uintptr_t inst, size_t minChildren) {
+    static const uint32_t CHILD_CANDS[] = {
+        0x60, 0x68, 0x70, 0x78, 0x80, 0x88, 0x90, 0x98, 0xA0, 0xA8, 0xB0, 0xB8
+    };
+    for (uint32_t off : CHILD_CANDS) {
+        uintptr_t vp = 0;
+        if (!mem::ExtRPM(inst + off, &vp, 8)) continue;
+        if (vp < 0x10000 || vp > 0x7FFFFFFFFFFFULL) continue;
+        uintptr_t b = 0, e = 0;
+        if (!mem::ExtRPM(vp,     &b, 8)) continue;
+        if (!mem::ExtRPM(vp + 8, &e, 8)) continue;
+        if (!b || e <= b) continue;
+        if ((e - b) % 16 != 0) continue;
+        size_t n = (e - b) / 16;
+        if (n >= minChildren && n <= 2000) return true;
+    }
+    return false;
+}
+
+// No-sig resolver. Walks RobloxPlayerBeta.exe's .data / .rdata / .bss sections,
+// 8-byte aligned, looking for any pointer whose dereference lands on an
+// Instance-shaped object with >=5 children. First candidate that passes
+// probe::InstanceLayout with 3+ expected service-name matches wins — that's
+// FakeDataModel. Returns the static pointer address (write to g.FakeDataModelPtr)
+// or 0.
+static uintptr_t ScanDataSectionsForDataModel(uintptr_t modBase) {
+    IMAGE_DOS_HEADER dos = mem::ExtRead<IMAGE_DOS_HEADER>(modBase);
+    if (dos.e_magic != IMAGE_DOS_SIGNATURE) return 0;
+    IMAGE_NT_HEADERS64 nt = mem::ExtRead<IMAGE_NT_HEADERS64>(modBase + dos.e_lfanew);
+    if (nt.Signature != IMAGE_NT_SIGNATURE) return 0;
+    uintptr_t sh = modBase + dos.e_lfanew + sizeof(IMAGE_NT_HEADERS64);
+
+    int candidatesSeen = 0, preFilterPassed = 0;
+
+    for (WORD i = 0; i < nt.FileHeader.NumberOfSections; ++i) {
+        IMAGE_SECTION_HEADER s = mem::ExtRead<IMAGE_SECTION_HEADER>(sh + i * sizeof(IMAGE_SECTION_HEADER));
+        char nm[9]{};
+        std::memcpy(nm, s.Name, 8);
+
+        bool isData = !std::strncmp(nm, ".data",  5)
+                   || !std::strncmp(nm, ".rdata", 6)
+                   || !std::strncmp(nm, ".bss",   4);
+        if (!isData) continue;
+
+        uintptr_t secBase = modBase + s.VirtualAddress;
+        size_t    secSize = s.Misc.VirtualSize;
+        hilog::Info("scan: %s base=0x%p size=0x%zX", nm, (void*)secBase, secSize);
+
+        constexpr size_t CHUNK = 0x10000;
+        std::vector<uint8_t> buf(CHUNK);
+        uintptr_t off = 0;
+        while (off < secSize) {
+            size_t want = (secSize - off < CHUNK) ? (secSize - off) : CHUNK;
+            SIZE_T got = 0;
+            if (!ReadProcessMemory(mem::g_hProc, (LPCVOID)(secBase + off),
+                                   buf.data(), want, &got) || got < 8) {
+                off += CHUNK;
+                continue;
+            }
+            for (size_t j = 0; j + 8 <= got; j += 8) {
+                uintptr_t inst;
+                std::memcpy(&inst, buf.data() + j, 8);
+                if (inst < 0x10000 || inst > 0x7FFFFFFFFFFFULL) continue;
+                ++candidatesSeen;
+                if (!LooksLikeInstance(inst, 5)) continue;
+                ++preFilterPassed;
+
+                // Save inst offsets; probe::InstanceLayout will try to set them
+                // against this candidate. Restore on fail so bad candidates don't
+                // leave g.inst in a corrupted state.
+                auto saved = g.inst;
+                if (probe::InstanceLayout(inst)) {
+                    uintptr_t global = secBase + off + j;
+                    hilog::Info("scan: DataModel FOUND after %d candidates (%d pre-filtered)",
+                                candidatesSeen, preFilterPassed);
+                    hilog::Info("scan: FakeDataModelPtr=0x%p  *ptr=0x%p",
+                                (void*)global, (void*)inst);
+                    return global;
+                }
+                g.inst = saved;
+            }
+            off += got;
+        }
+    }
+    hilog::Err("scan: no DataModel found (%d candidates, %d pre-filter hits)",
+               candidatesSeen, preFilterPassed);
+    return 0;
+}
+
 bool Resolve() {
     auto mod = scan::GetModule(mem::g_pid, L"RobloxPlayerBeta.exe");
     if (!mod) { hilog::Err("RobloxPlayerBeta.exe module not found"); return false; }
 
     auto key = KeyOf(*mod);
     if (TryLoadCache(key)) {
-        // cache hit, but still run probe to validate against live memory and recover
-        // if something has shifted since the cache was written
         if (!probe::All()) hilog::Warn("cache loaded but probe revalidate failed - will rescan");
         else return true;
     }
@@ -154,10 +245,15 @@ bool Resolve() {
     hilog::Info("scanning .text base=0x%p size=0x%zX", (void*)textBase, textSize);
 
     g.FakeDataModelPtr = TrySigFamily(textBase, textSize, SIG_FAKE_DATAMODEL);
-    if (!g.FakeDataModelPtr) { hilog::Err("FakeDataModel: all sig families rot"); return false; }
 
-    // probe fills every downstream offset by walking live memory, self-verifying.
-    if (!probe::All()) { hilog::Err("probe chain failed - the game may not be in a place yet"); return false; }
+    if (!g.FakeDataModelPtr) {
+        hilog::Warn("all sig families rot - falling back to data-section pointer scan");
+        g.FakeDataModelPtr = ScanDataSectionsForDataModel(mod->base);
+    }
+
+    if (!g.FakeDataModelPtr) { hilog::Err("FakeDataModel: sig scan AND data scan failed"); return false; }
+
+    if (!probe::All()) { hilog::Err("probe chain failed after FakeDataModel resolved"); return false; }
 
     SaveCache();
     return true;

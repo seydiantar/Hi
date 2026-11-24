@@ -34,7 +34,9 @@ int wmain(int argc, wchar_t** argv) {
     config::AppCfg cfg;
     config::Load(L"rbx-ext", cfg);
 
-    if (!overlay::Init() && !dumpOnly) { hilog::Err("overlay init failed"); return 3; }
+    if (!dumpOnly) {
+        if (!overlay::Init()) { hilog::Err("overlay init failed"); return 3; }
+    }
 
     while (true) {
         if (!mem::WaitAttach(L"RobloxPlayerBeta.exe")) { hilog::Err("attach failed"); break; }
