@@ -1,6 +1,6 @@
 #pragma once
 #include "game.h"
-#include "math.h"
+#include "himath.h"
 #include <string>
 #include <vector>
 

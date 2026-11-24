@@ -1,5 +1,5 @@
 #pragma once
-#include "math.h"
+#include "himath.h"
 #include "mem.h"
 #include "sigs.h"
 #include <cstdint>
