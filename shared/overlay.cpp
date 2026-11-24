@@ -30,9 +30,9 @@ static ComPtr<ID3D11RenderTargetView> g_rtv;
 static bool CreateRT() {
     ComPtr<ID3D11Texture2D> bb;
     HRESULT hr = g_sc->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)bb.GetAddressOf());
-    if (FAILED(hr)) { log::Err("sc->GetBuffer hr=0x%08lX", (unsigned long)hr); return false; }
+    if (FAILED(hr)) { hilog::Err("sc->GetBuffer hr=0x%08lX", (unsigned long)hr); return false; }
     hr = g_dev->CreateRenderTargetView(bb.Get(), nullptr, &g_rtv);
-    if (FAILED(hr)) { log::Err("CreateRTV hr=0x%08lX", (unsigned long)hr); return false; }
+    if (FAILED(hr)) { hilog::Err("CreateRTV hr=0x%08lX", (unsigned long)hr); return false; }
     return true;
 }
 static void ReleaseRT() { g_rtv.Reset(); }
@@ -75,7 +75,7 @@ bool Init() {
         kClass, L"", WS_POPUP,
         sx, sy, g_w, g_h,
         nullptr, nullptr, hi, nullptr);
-    if (!g_hwnd) { log::Err("CreateWindowExW gle=%lu", GetLastError()); return false; }
+    if (!g_hwnd) { hilog::Err("CreateWindowExW gle=%lu", GetLastError()); return false; }
 
     MARGINS m{ -1, -1, -1, -1 };
     DwmExtendFrameIntoClientArea(g_hwnd, &m);
@@ -100,7 +100,7 @@ bool Init() {
         nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
         fls, 1, D3D11_SDK_VERSION, &scd,
         &g_sc, &g_dev, nullptr, &g_ctx);
-    if (FAILED(hr)) { log::Err("D3D11CreateDeviceAndSwapChain hr=0x%08lX", (unsigned long)hr); return false; }
+    if (FAILED(hr)) { hilog::Err("D3D11CreateDeviceAndSwapChain hr=0x%08lX", (unsigned long)hr); return false; }
     if (!CreateRT()) return false;
 
     IMGUI_CHECKVERSION();
@@ -111,10 +111,10 @@ bool Init() {
     io.LogFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
 
-    if (!ImGui_ImplWin32_Init(g_hwnd))                     { log::Err("ImGui_ImplWin32_Init"); return false; }
-    if (!ImGui_ImplDX11_Init(g_dev.Get(), g_ctx.Get()))    { log::Err("ImGui_ImplDX11_Init"); return false; }
+    if (!ImGui_ImplWin32_Init(g_hwnd))                     { hilog::Err("ImGui_ImplWin32_Init"); return false; }
+    if (!ImGui_ImplDX11_Init(g_dev.Get(), g_ctx.Get()))    { hilog::Err("ImGui_ImplDX11_Init"); return false; }
 
-    log::Info("overlay init %dx%d hwnd=%p", g_w, g_h, (void*)g_hwnd);
+    hilog::Info("overlay init %dx%d hwnd=%p", g_w, g_h, (void*)g_hwnd);
     return true;
 }
 

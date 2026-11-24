@@ -65,7 +65,7 @@ std::vector<ScreenPlayer> Snapshot(uintptr_t clientBase, const float vm[16], int
         if (!fv) continue;
 
         out.push_back({
-            s.idx, s.ctrl.Name(), s.pawn.Health(), team, dist, enemy,
+            s.idx, s.pawn.addr, s.ctrl.Name(), s.pawn.Health(), team, dist, enemy,
             box, foot, fs, hs, hv
         });
     }

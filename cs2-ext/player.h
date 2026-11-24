@@ -13,6 +13,7 @@ BoxPx ComputeBox(const Pawn& p, const float vm[16], int sw, int sh);
 
 struct ScreenPlayer {
     int         idx;
+    uintptr_t   pawnAddr;
     std::string name;
     int         health;
     int         team;

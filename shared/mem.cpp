@@ -25,11 +25,11 @@ bool Attach(const wchar_t* exeName) {
     DWORD pid = FindPid(exeName);
     if (!pid) return false;
     HANDLE h = OpenProcess(PROCESS_VM_READ, FALSE, pid);
-    if (!h) { log::Err("OpenProcess pid=%lu gle=%lu", pid, GetLastError()); return false; }
+    if (!h) { hilog::Err("OpenProcess pid=%lu gle=%lu", pid, GetLastError()); return false; }
     Detach();
     g_hProc = h;
     g_pid   = pid;
-    log::Info("attached pid=%lu (%ls)", pid, exeName);
+    hilog::Info("attached pid=%lu (%ls)", pid, exeName);
     return true;
 }
 

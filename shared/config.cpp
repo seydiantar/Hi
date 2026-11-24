@@ -22,10 +22,10 @@ bool Load(const wchar_t* appName, AppCfg& out) {
     try {
         nlohmann::json j; f >> j;
         out = j.get<AppCfg>();
-        log::Info("config loaded from %ls", path.c_str());
+        hilog::Info("config loaded from %ls", path.c_str());
         return true;
     } catch (const std::exception& e) {
-        log::Warn("config load failed: %s", e.what());
+        hilog::Warn("config load failed: %s", e.what());
         return false;
     }
 }
@@ -34,9 +34,9 @@ bool Save(const wchar_t* appName, const AppCfg& in) {
     auto path = PathFor(appName);
     nlohmann::json j = in;
     std::ofstream f(path);
-    if (!f) { log::Err("config save open failed"); return false; }
+    if (!f) { hilog::Err("config save open failed"); return false; }
     f << j.dump(2);
-    log::Info("config saved to %ls", path.c_str());
+    hilog::Info("config saved to %ls", path.c_str());
     return true;
 }
 

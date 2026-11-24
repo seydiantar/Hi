@@ -6,7 +6,7 @@
 #include <ctime>
 #include <filesystem>
 
-namespace log {
+namespace hilog {
 
 static FILE*            g_fp    = nullptr;
 static std::mutex       g_lock;
@@ -66,4 +66,4 @@ void Write(Level lvl, const char* fmt, ...) {
 const std::vector<Entry>& Ring() { return g_ring; }
 std::mutex&               RingLock() { return g_lock; }
 
-} // namespace log
+} // namespace hilog

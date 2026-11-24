@@ -82,10 +82,10 @@ static bool TryLoadCache(const ModuleKey& key) {
         g.player.LocalPlayer      = j["offsets"]["player.LocalPlayer"].get<uint32_t>();
         g.player.Character        = j["offsets"]["player.Character"].get<uint32_t>();
         g.player.Team             = j["offsets"]["player.Team"].get<uint32_t>();
-        log::Info("rbx sigs loaded from cache");
+        hilog::Info("rbx sigs loaded from cache");
         return true;
     } catch (const std::exception& e) {
-        log::Warn("cache parse: %s", e.what());
+        hilog::Warn("cache parse: %s", e.what());
         return false;
     }
 }
@@ -119,7 +119,7 @@ bool SaveCache() {
     std::ofstream f(CachePath());
     if (!f) return false;
     f << j.dump(2);
-    log::Info("rbx sigs cached");
+    hilog::Info("rbx sigs cached");
     return true;
 }
 
@@ -129,35 +129,35 @@ static uintptr_t TrySigFamily(uintptr_t textBase, size_t textSize, const char* c
         if (hits == 1) {
             uintptr_t at = scan::FindPattern(textBase, textSize, sigs[i]);
             uintptr_t resolved = scan::RipRelative<uintptr_t>(at, 3, 7);
-            log::Info("sig '%s' hit=1 at=0x%p resolved=0x%p", sigs[i], (void*)at, (void*)resolved);
+            hilog::Info("sig '%s' hit=1 at=0x%p resolved=0x%p", sigs[i], (void*)at, (void*)resolved);
             return resolved;
         }
-        log::Dbg("sig '%s' hits=%d", sigs[i], hits);
+        hilog::Dbg("sig '%s' hits=%d", sigs[i], hits);
     }
     return 0;
 }
 
 bool Resolve() {
     auto mod = scan::GetModule(mem::g_pid, L"RobloxPlayerBeta.exe");
-    if (!mod) { log::Err("RobloxPlayerBeta.exe module not found"); return false; }
+    if (!mod) { hilog::Err("RobloxPlayerBeta.exe module not found"); return false; }
 
     auto key = KeyOf(*mod);
     if (TryLoadCache(key)) {
         // cache hit, but still run probe to validate against live memory and recover
         // if something has shifted since the cache was written
-        if (!probe::All()) log::Warn("cache loaded but probe revalidate failed - will rescan");
+        if (!probe::All()) hilog::Warn("cache loaded but probe revalidate failed - will rescan");
         else return true;
     }
 
     auto [textBase, textSize] = scan::GetTextSection(mod->base);
-    if (!textBase) { log::Err("could not parse .text"); return false; }
-    log::Info("scanning .text base=0x%p size=0x%zX", (void*)textBase, textSize);
+    if (!textBase) { hilog::Err("could not parse .text"); return false; }
+    hilog::Info("scanning .text base=0x%p size=0x%zX", (void*)textBase, textSize);
 
     g.FakeDataModelPtr = TrySigFamily(textBase, textSize, SIG_FAKE_DATAMODEL);
-    if (!g.FakeDataModelPtr) { log::Err("FakeDataModel: all sig families rot"); return false; }
+    if (!g.FakeDataModelPtr) { hilog::Err("FakeDataModel: all sig families rot"); return false; }
 
     // probe fills every downstream offset by walking live memory, self-verifying.
-    if (!probe::All()) { log::Err("probe chain failed - the game may not be in a place yet"); return false; }
+    if (!probe::All()) { hilog::Err("probe chain failed - the game may not be in a place yet"); return false; }
 
     SaveCache();
     return true;
@@ -165,18 +165,18 @@ bool Resolve() {
 
 bool SanityProbe() {
     uintptr_t dm = mem::ExtRead<uintptr_t>(g.FakeDataModelPtr);
-    if (!dm) { log::Err("DataModel NULL (not in a place yet?)"); return true; }
+    if (!dm) { hilog::Err("DataModel NULL (not in a place yet?)"); return true; }
 
     // Cheap consistency check: find Workspace via the just-resolved offsets.
-    if (!g.inst.Children || !g.inst.Name) { log::Warn("sanity: inst offsets unresolved"); return false; }
+    if (!g.inst.Children || !g.inst.Name) { hilog::Warn("sanity: inst offsets unresolved"); return false; }
     // Walk one level and count children.
     uintptr_t vecPtr = mem::ExtRead<uintptr_t>(dm + g.inst.Children);
-    if (!vecPtr) { log::Err("sanity: DataModel children vec null"); return false; }
+    if (!vecPtr) { hilog::Err("sanity: DataModel children vec null"); return false; }
     uintptr_t b = mem::ExtRead<uintptr_t>(vecPtr);
     uintptr_t e = mem::ExtRead<uintptr_t>(vecPtr + 8);
-    if (!b || e <= b) { log::Err("sanity: DataModel children empty"); return false; }
+    if (!b || e <= b) { hilog::Err("sanity: DataModel children empty"); return false; }
     size_t n = (e - b) / 16;
-    log::Info("sanity ok: DataModel=0x%p children=%zu", (void*)dm, n);
+    hilog::Info("sanity ok: DataModel=0x%p children=%zu", (void*)dm, n);
     return true;
 }
 

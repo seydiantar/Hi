@@ -5,8 +5,12 @@
 #include <nlohmann/json.hpp>
 #include <windows.h>
 #include <shlobj.h>
+#include <winhttp.h>
 #include <filesystem>
 #include <fstream>
+#include <vector>
+
+#pragma comment(lib, "winhttp.lib")
 
 namespace cs2::off {
 
@@ -32,7 +36,7 @@ static bool TryRead(const std::filesystem::path& p, json& out) {
     std::ifstream f(p);
     if (!f) return false;
     try { f >> out; } catch (const std::exception& e) {
-        log::Warn("offsets parse %ls: %s", p.c_str(), e.what());
+        hilog::Warn("offsets parse %ls: %s", p.c_str(), e.what());
         return false;
     }
     return true;
@@ -93,13 +97,65 @@ static void FillFromJson(const json& offs, const json& cdll) {
     g.model_state.m_pChunk    = 0x80;  // historically stable within CModelState; JSON key varies
 }
 
+static bool HttpsGet(const wchar_t* host, const wchar_t* path, std::string& out) {
+    out.clear();
+    HINTERNET session = WinHttpOpen(L"hi/1.0",
+        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+        WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session) return false;
+
+    HINTERNET conn = WinHttpConnect(session, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (!conn) { WinHttpCloseHandle(session); return false; }
+
+    HINTERNET req = WinHttpOpenRequest(conn, L"GET", path, nullptr,
+        WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    if (!req) { WinHttpCloseHandle(conn); WinHttpCloseHandle(session); return false; }
+
+    bool ok = WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                                 WINHTTP_NO_REQUEST_DATA, 0, 0, 0)
+           && WinHttpReceiveResponse(req, nullptr);
+
+    DWORD status = 0, statusLen = sizeof(status);
+    WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusLen, WINHTTP_NO_HEADER_INDEX);
+    if (status != 200) ok = false;
+
+    if (ok) {
+        DWORD avail = 0;
+        while (WinHttpQueryDataAvailable(req, &avail) && avail > 0) {
+            std::vector<char> buf(avail);
+            DWORD read = 0;
+            if (!WinHttpReadData(req, buf.data(), avail, &read)) { ok = false; break; }
+            out.append(buf.data(), read);
+            if (out.size() > 4 * 1024 * 1024) { ok = false; break; }
+        }
+    }
+
+    WinHttpCloseHandle(req);
+    WinHttpCloseHandle(conn);
+    WinHttpCloseHandle(session);
+    return ok && !out.empty();
+}
+
 static bool FetchLatest(json& offs, json& cdll) {
-    // FILL: implement WinHTTP GET for
-    //   https://raw.githubusercontent.com/a2x/cs2-dumper/main/output/offsets.json
-    //   https://raw.githubusercontent.com/a2x/cs2-dumper/main/output/client_dll.json
-    // Write to CacheDir() if both parse. Returning false here skips to bundled copy.
-    (void)offs; (void)cdll;
-    return false;
+    std::string a, b;
+    if (!HttpsGet(L"raw.githubusercontent.com",
+                  L"/a2x/cs2-dumper/main/output/offsets.json", a)) {
+        hilog::Warn("cs2-dumper offsets.json fetch failed");
+        return false;
+    }
+    if (!HttpsGet(L"raw.githubusercontent.com",
+                  L"/a2x/cs2-dumper/main/output/client_dll.json", b)) {
+        hilog::Warn("cs2-dumper client_dll.json fetch failed");
+        return false;
+    }
+    try { offs = json::parse(a); cdll = json::parse(b); }
+    catch (const std::exception& e) {
+        hilog::Warn("cs2-dumper JSON parse: %s", e.what());
+        return false;
+    }
+    hilog::Info("cs2-dumper main fetched: offsets=%zuB, client_dll=%zuB", a.size(), b.size());
+    return true;
 }
 
 bool Load() {
@@ -122,11 +178,11 @@ bool Load() {
         have = TryRead(dir / L"offsets.json", offs) && TryRead(dir / L"client_dll.json", cdll);
     }
 
-    if (!have) { log::Err("no offsets source available (cache, net, bundled all failed)"); return false; }
+    if (!have) { hilog::Err("no offsets source available (cache, net, bundled all failed)"); return false; }
 
     FillFromJson(offs, cdll);
 
-    log::Info("offsets loaded: pawn=0x%X entity=0x%X view=0x%X",
+    hilog::Info("offsets loaded: pawn=0x%X entity=0x%X view=0x%X",
               g.dwLocalPlayerPawn, g.dwEntityList, g.dwViewMatrix);
     return g.dwLocalPlayerPawn && g.dwEntityList && g.dwViewMatrix
         && g.pawn.m_iHealth && g.pawn.m_pGameSceneNode;
@@ -134,21 +190,21 @@ bool Load() {
 
 bool SanityProbe() {
     auto client = scan::GetModule(mem::g_pid, L"client.dll");
-    if (!client) { log::Err("client.dll not mapped"); return false; }
+    if (!client) { hilog::Err("client.dll not mapped"); return false; }
 
     uintptr_t local = mem::ExtRead<uintptr_t>(client->base + g.dwLocalPlayerPawn);
-    if (!local) { log::Warn("LocalPlayerPawn NULL (not in a match yet?)"); return true; }
+    if (!local) { hilog::Warn("LocalPlayerPawn NULL (not in a match yet?)"); return true; }
 
     int hp = mem::ExtRead<int>(local + g.pawn.m_iHealth);
-    if (hp < -10 || hp > 1000) { log::Err("sanity: m_iHealth=%d (out of range)", hp); return false; }
+    if (hp < -10 || hp > 1000) { hilog::Err("sanity: m_iHealth=%d (out of range)", hp); return false; }
 
     float vm[16];
     mem::ExtRPM(client->base + g.dwViewMatrix, vm, sizeof(vm));
     bool nanFree = true;
     for (float f : vm) if (!(f == f)) { nanFree = false; break; }
-    if (!nanFree) { log::Err("sanity: view matrix has NaN"); return false; }
+    if (!nanFree) { hilog::Err("sanity: view matrix has NaN"); return false; }
 
-    log::Info("sanity ok: localHP=%d", hp);
+    hilog::Info("sanity ok: localHP=%d", hp);
     return true;
 }
 

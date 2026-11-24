@@ -1,0 +1,50 @@
+name: build
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+jobs:
+  mingw-cross:
+    runs-on: ubuntu-24.04
+    name: cross-compile (mingw-w64)
+    steps:
+      - uses: actions/checkout@v4
+      - name: install mingw-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 cmake ninja-build
+      - name: configure
+        run: cmake -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-mingw.cmake -DCMAKE_BUILD_TYPE=Release
+      - name: build
+        run: cmake --build build -j
+      - name: verify binaries
+        run: |
+          file build/cs2-ext/cs2-ext.exe
+          file build/rbx-ext/rbx-ext.exe
+          ls -lh build/cs2-ext/cs2-ext.exe build/rbx-ext/rbx-ext.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hi-mingw
+          path: |
+            build/cs2-ext/cs2-ext.exe
+            build/rbx-ext/rbx-ext.exe
+            cs2-ext/offsets.json
+
+  msvc:
+    runs-on: windows-latest
+    name: native build (MSVC)
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure
+        run: cmake -B build -G "Visual Studio 17 2022" -A x64
+      - name: build
+        run: cmake --build build --config Release -j
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hi-msvc
+          path: |
+            build/cs2-ext/Release/cs2-ext.exe
+            build/rbx-ext/Release/rbx-ext.exe
+            cs2-ext/offsets.json

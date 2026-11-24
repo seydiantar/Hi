@@ -12,12 +12,12 @@
 - [x] **S1** — plan, arch, offset strategy, overlay strategy, scanner code
 - [x] **S3** — `shared/` complete: mem, scanner, wts, overlay, menu, config, log, math
 - [x] **S4** — `cs2-ext/` complete; `offsets.json` bundled with current a2x/cs2-dumper main values
-- [x] **S5** — `rbx-ext/` core: sig scanner, instance walker, player/esp/menu
-- [x] **S5b** — `rbx-ext/probe.cpp` runtime offset self-resolver (Instance.Name/Children, ClassDescriptor, Camera CFrame/VP/FOV, BasePart.CFrame, LocalPlayer, Character, Humanoid)
-- [x] **S5c** — `rbx-ext/camera.cpp` proper Camera module (CFrame, WTS, forward/right/up, ray dist)
-- [x] **S5d** — `rbx-ext/skeleton.cpp` R6/R15 autodetect + limb/link tables
-- [ ] **S2 (at PC)** — build; verify cs2 offsets still resolve against your local CS2 build; confirm Roblox FakeDataModel sig against live module (probe handles the rest)
-- [ ] **S6** — polish: WinHTTP cs2-dumper fetch, CS2 skeleton ESP thread-through, visibility ray test, auto-reattach loop
+- [x] **S5** — `rbx-ext/` core + probe-resolve + camera module + R6/R15 skeleton
+- [x] **S6a** — WinHTTP fetch of cs2-dumper main at startup, atomic write to `%LOCALAPPDATA%\hi\cs2`, bundled fallback
+- [x] **S6b** — CS2 skeleton ESP: pawn addr threaded through `ScreenPlayer`, BONE_LINKS drawn with shadowed line pairs
+- [x] **S6c** — auto-reattach loop in both cs2-ext/main.cpp and rbx-ext/main.cpp — overlay stays up across game restarts
+- [x] **S7** — **REPO BUILDS CLEAN** via mingw-w64 cross-compile: both `cs2-ext.exe` + `rbx-ext.exe` produced as valid PE32+ x86-64 Windows GUI executables (3.8 MB each). GitHub Actions CI runs mingw-cross and native MSVC on every push.
+- [ ] **S2 (at PC)** — pick the mingw .exe from CI artifacts OR do native MSVC build; dump CS2 offsets via cs2-dumper (overwrites bundled copy) OR let launch-time WinHTTP do it; confirm Roblox FakeDataModel sig against live module (probe handles everything downstream)
 
 ## OPEN QUESTIONS (resolve at PC, not now)
 
@@ -588,7 +588,5 @@ rbx-ext/
 
 ## WHAT'S STILL FILL-MARKED
 
-- `cs2-ext/offsets.cpp::FetchLatest` — WinHTTP GET for cs2-dumper main JSON (implement when net access is wanted; bundled fallback works today)
-- `cs2-ext/esp.cpp::DrawSkeleton` — needs pawn addr threaded through `ScreenPlayer`; use the one in `cs2-ext/entity.cpp::EnumPlayers` output (easy; left as S6)
-- `rbx-ext/sigs.cpp` — second sig family for `inst.Name` and `inst.Children` offsets; defaults are historical guesses, verify at PC
-- `cs2-ext/offsets.json`, `cs2-ext/client_dll.json` — produced by cs2-dumper at PC
+- `cs2-ext/client_dll.json` — only `offsets.json` bundled; `client_dll.json` produced by cs2-dumper at PC OR fetched at launch via WinHTTP (both paths wired)
+- `rbx-ext/sigs.cpp::SIG_FAKE_DATAMODEL` — 4 sig families seeded; probe self-verifies everything downstream, so these are the only thing to re-derive at PC if all four rot

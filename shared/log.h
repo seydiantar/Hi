@@ -3,7 +3,7 @@
 #include <vector>
 #include <mutex>
 
-namespace log {
+namespace hilog {
 
 enum class Level { Dbg, Info, Warn, Err };
 
@@ -22,4 +22,4 @@ struct Entry { Level lvl; std::string text; };
 const std::vector<Entry>& Ring();          // callers must lock
 std::mutex&               RingLock();
 
-} // namespace log
+} // namespace hilog

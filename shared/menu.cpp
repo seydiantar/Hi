@@ -86,15 +86,15 @@ void DrawAboutTab(const char* title) {
 }
 
 void DrawLogConsole() {
-    std::lock_guard<std::mutex> lk(log::RingLock());
-    const auto& ring = log::Ring();
+    std::lock_guard<std::mutex> lk(hilog::RingLock());
+    const auto& ring = hilog::Ring();
     if (ImGui::BeginChild("##log", { 0, 0 }, true)) {
         for (auto& e : ring) {
             ImVec4 c{ 0.9f, 0.9f, 0.9f, 1.f };
             switch (e.lvl) {
-                case log::Level::Warn: c = { 1.f, 0.85f, 0.3f, 1.f }; break;
-                case log::Level::Err:  c = { 1.f, 0.4f,  0.4f, 1.f }; break;
-                case log::Level::Dbg:  c = { 0.6f, 0.6f, 0.6f, 1.f }; break;
+                case hilog::Level::Warn: c = { 1.f, 0.85f, 0.3f, 1.f }; break;
+                case hilog::Level::Err:  c = { 1.f, 0.4f,  0.4f, 1.f }; break;
+                case hilog::Level::Dbg:  c = { 0.6f, 0.6f, 0.6f, 1.f }; break;
                 default: break;
             }
             ImGui::TextColored(c, "%s", e.text.c_str());

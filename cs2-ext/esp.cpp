@@ -87,22 +87,40 @@ void DrawESP(const std::vector<ScreenPlayer>& players, const config::VisualCfg& 
     }
 }
 
-// Called from main loop AFTER Snapshot. Walks bones per player, draws skeleton.
-void DrawSkeleton(uintptr_t clientBase, const std::vector<ScreenPlayer>& players,
+void DrawSkeleton(const std::vector<ScreenPlayer>& players,
                   const float vm[16], const config::VisualCfg& cfg) {
     if (!cfg.skeleton) return;
-    (void)clientBase;
     auto* dl = ImGui::GetForegroundDrawList();
-    const ImU32 col = FromRGBA(cfg.color_box_rgba);
+    const ImU32 col    = FromRGBA(cfg.color_box_rgba);
+    const ImU32 shadow = IM_COL32(0, 0, 0, 180);
 
     int sw, sh; overlay::GetSize(sw, sh);
+
     for (const auto& p : players) {
-        // Pull the whole bone set for this player again via cached scene-node ptr-chain.
-        // Cheap for 10-16 bones.
-        Pawn pw{ 0 };  // We don't have the pawn addr here; pass bones in Snapshot next time.
-        (void)pw; (void)col; (void)dl; (void)sw; (void)sh; (void)BONE_LINKS;
-        // FILL: thread pawn addr through ScreenPlayer or make a dedicated skeleton pass.
-        break;
+        if (!p.pawnAddr) continue;
+        Pawn pw{ p.pawnAddr };
+
+        // project every bone we care about; -1 = not projected
+        constexpr int MAX_BONE = 30;
+        Vec2  screen[MAX_BONE + 1];
+        bool  ok[MAX_BONE + 1]{};
+        for (int b = 0; b <= MAX_BONE; ++b) {
+            Vec3 w = pw.BonePos(b);
+            if (w.x == 0 && w.y == 0 && w.z == 0) continue;
+            if (wts::Source2(vm, w, sw, sh, screen[b])) ok[b] = true;
+        }
+
+        for (const auto& link : BONE_LINKS) {
+            int a = link[0], b = link[1];
+            if (a > MAX_BONE || b > MAX_BONE) continue;
+            if (!ok[a] || !ok[b]) continue;
+            dl->AddLine({ screen[a].x, screen[a].y }, { screen[b].x, screen[b].y }, shadow, 2.f);
+            dl->AddLine({ screen[a].x, screen[a].y }, { screen[b].x, screen[b].y }, col,    1.f);
+        }
+        // joint dots on head + torso anchors
+        if (ok[BONE_HEAD])   dl->AddCircleFilled({ screen[BONE_HEAD].x,   screen[BONE_HEAD].y   }, 2.f, col);
+        if (ok[BONE_CHEST])  dl->AddCircleFilled({ screen[BONE_CHEST].x,  screen[BONE_CHEST].y  }, 1.5f, col);
+        if (ok[BONE_PELVIS]) dl->AddCircleFilled({ screen[BONE_PELVIS].x, screen[BONE_PELVIS].y }, 1.5f, col);
     }
 }
 

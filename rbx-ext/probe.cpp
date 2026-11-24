@@ -105,7 +105,7 @@ bool InstanceLayout(uintptr_t dm) {
             if (hits >= 3) {
                 off::g.inst.Children = childOff;
                 off::g.inst.Name     = nameOff;
-                log::Info("probe: inst.Children=0x%X  inst.Name=0x%X  (%d expected-name hits)",
+                hilog::Info("probe: inst.Children=0x%X  inst.Name=0x%X  (%d expected-name hits)",
                           childOff, nameOff, hits);
                 return true;
             }
@@ -130,7 +130,7 @@ bool ClassLayout(uintptr_t knownInst, const char* expected) {
                 if (nm == expected) {
                     off::g.inst.ClassDescriptor = clsOff;
                     off::g.cls.Name = nameOff;
-                    log::Info("probe: inst.ClassDescriptor=0x%X  cls.Name=0x%X  (cstr '%s')",
+                    hilog::Info("probe: inst.ClassDescriptor=0x%X  cls.Name=0x%X  (cstr '%s')",
                               clsOff, nameOff, nm.c_str());
                     return true;
                 }
@@ -140,7 +140,7 @@ bool ClassLayout(uintptr_t knownInst, const char* expected) {
             if (nm2 == expected) {
                 off::g.inst.ClassDescriptor = clsOff;
                 off::g.cls.Name = nameOff;
-                log::Info("probe: inst.ClassDescriptor=0x%X  cls.Name=0x%X  (SSO '%s')",
+                hilog::Info("probe: inst.ClassDescriptor=0x%X  cls.Name=0x%X  (SSO '%s')",
                           clsOff, nameOff, nm2.c_str());
                 return true;
             }
@@ -161,7 +161,7 @@ bool CameraLayout(uintptr_t cam) {
         if (std::fabs(p.x) > 1e7f || std::fabs(p.y) > 1e7f || std::fabs(p.z) > 1e7f) continue;
         off::g.cam.CoordinateFrame = off;
         cfOk = true;
-        log::Info("probe: cam.CoordinateFrame=0x%X  (pos %.1f,%.1f,%.1f)", off, p.x, p.y, p.z);
+        hilog::Info("probe: cam.CoordinateFrame=0x%X  (pos %.1f,%.1f,%.1f)", off, p.x, p.y, p.z);
     }
 
     for (uint32_t off = 0x100; off < 0xA00 && !vpOk; off += 4) {
@@ -172,7 +172,7 @@ bool CameraLayout(uintptr_t cam) {
         if (v.x < v.y) continue;
         off::g.cam.ViewportSize = off;
         vpOk = true;
-        log::Info("probe: cam.ViewportSize=0x%X  (%.0fx%.0f)", off, v.x, v.y);
+        hilog::Info("probe: cam.ViewportSize=0x%X  (%.0fx%.0f)", off, v.x, v.y);
     }
 
     for (uint32_t off = 0x100; off < 0xA00 && !fovOk; off += 4) {
@@ -184,7 +184,7 @@ bool CameraLayout(uintptr_t cam) {
         if (frac == 0.f && f > 90.f) continue;
         off::g.cam.FieldOfView = off;
         fovOk = true;
-        log::Info("probe: cam.FieldOfView=0x%X  (%.2f)", off, f);
+        hilog::Info("probe: cam.FieldOfView=0x%X  (%.2f)", off, f);
     }
     return cfOk && vpOk && fovOk;
 }
@@ -198,7 +198,7 @@ bool PartLayout(uintptr_t part) {
         if (!(p.x == p.x) || !(p.y == p.y) || !(p.z == p.z)) continue;
         if (std::fabs(p.x) > 1e7f) continue;
         off::g.part.CFrame = off;
-        log::Info("probe: part.CFrame=0x%X  (pos %.1f,%.1f,%.1f)", off, p.x, p.y, p.z);
+        hilog::Info("probe: part.CFrame=0x%X  (pos %.1f,%.1f,%.1f)", off, p.x, p.y, p.z);
         return true;
     }
     return false;
@@ -215,7 +215,7 @@ bool PlayerServiceLayout(uintptr_t playersSvc) {
         if (!cand) continue;
         if (kidSet.count(cand)) {
             off::g.player.LocalPlayer = off;
-            log::Info("probe: player.LocalPlayer=0x%X  -> 0x%p", off, (void*)cand);
+            hilog::Info("probe: player.LocalPlayer=0x%X  -> 0x%p", off, (void*)cand);
             return true;
         }
     }
@@ -233,7 +233,7 @@ bool PlayerFields(uintptr_t player) {
             std::string n = ReadStdStringAt(c + off::g.inst.Name);
             if (n == "HumanoidRootPart" || n == "Head" || n == "Torso" || n == "UpperTorso") {
                 off::g.player.Character = off;
-                log::Info("probe: player.Character=0x%X", off);
+                hilog::Info("probe: player.Character=0x%X", off);
                 return true;
             }
         }
@@ -253,7 +253,7 @@ bool HumanoidLayout(uintptr_t humanoid) {
             if (h > m + 0.1f) continue;
             off::g.humanoid.Health    = off;
             off::g.humanoid.MaxHealth = off + stride;
-            log::Info("probe: humanoid.Health=0x%X  MaxHealth=0x%X  (%.1f/%.1f)",
+            hilog::Info("probe: humanoid.Health=0x%X  MaxHealth=0x%X  (%.1f/%.1f)",
                       off, off + stride, h, m);
             return true;
         }
@@ -272,43 +272,43 @@ static uintptr_t FindChildNamed(uintptr_t parent, const char* name) {
 }
 
 bool All() {
-    if (!off::g.FakeDataModelPtr) { log::Err("probe: FakeDataModelPtr unresolved"); return false; }
+    if (!off::g.FakeDataModelPtr) { hilog::Err("probe: FakeDataModelPtr unresolved"); return false; }
     uintptr_t dm = mem::ExtRead<uintptr_t>(off::g.FakeDataModelPtr);
-    if (!dm) { log::Err("probe: DataModel null (game not in a place yet?)"); return false; }
+    if (!dm) { hilog::Err("probe: DataModel null (game not in a place yet?)"); return false; }
 
-    if (!InstanceLayout(dm)) { log::Err("probe: InstanceLayout FAILED"); return false; }
+    if (!InstanceLayout(dm)) { hilog::Err("probe: InstanceLayout FAILED"); return false; }
 
     uintptr_t workspace = FindChildNamed(dm, "Workspace");
-    if (!workspace) { log::Err("probe: no Workspace child"); return false; }
+    if (!workspace) { hilog::Err("probe: no Workspace child"); return false; }
 
     ClassLayout(workspace, "Workspace");    // best-effort, defaults OK if it fails
 
     uintptr_t camera = FindChildNamed(workspace, "Camera");
     if (!camera) camera = FindChildNamed(workspace, "CurrentCamera");
-    if (!camera) { log::Err("probe: no Camera under Workspace"); return false; }
-    if (!CameraLayout(camera)) { log::Err("probe: CameraLayout FAILED"); return false; }
+    if (!camera) { hilog::Err("probe: no Camera under Workspace"); return false; }
+    if (!CameraLayout(camera)) { hilog::Err("probe: CameraLayout FAILED"); return false; }
 
     // Seed part.CFrame from cam.CoordinateFrame; overwrite authoritatively below if a part is reachable.
     off::g.part.CFrame = off::g.cam.CoordinateFrame;
 
     uintptr_t players = FindChildNamed(dm, "Players");
-    if (!players) { log::Warn("probe: no Players service (probably not in game yet)"); return true; }
+    if (!players) { hilog::Warn("probe: no Players service (probably not in game yet)"); return true; }
 
     if (!PlayerServiceLayout(players)) {
-        log::Warn("probe: PlayerServiceLayout failed, keeping defaults");
+        hilog::Warn("probe: PlayerServiceLayout failed, keeping defaults");
         return true;
     }
 
     uintptr_t localPlr = mem::ExtRead<uintptr_t>(players + off::g.player.LocalPlayer);
-    if (!localPlr) { log::Warn("probe: LocalPlayer null"); return true; }
+    if (!localPlr) { hilog::Warn("probe: LocalPlayer null"); return true; }
 
     if (!PlayerFields(localPlr)) {
-        log::Warn("probe: Player.Character not located (character not spawned?)");
+        hilog::Warn("probe: Player.Character not located (character not spawned?)");
         return true;
     }
 
     uintptr_t charAddr = mem::ExtRead<uintptr_t>(localPlr + off::g.player.Character);
-    if (!charAddr) { log::Warn("probe: local Character null"); return true; }
+    if (!charAddr) { hilog::Warn("probe: local Character null"); return true; }
 
     uintptr_t humanoid = FindChildNamed(charAddr, "Humanoid");
     if (humanoid) HumanoidLayout(humanoid);
