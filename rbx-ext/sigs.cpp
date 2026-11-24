@@ -1,4 +1,5 @@
 #include "sigs.h"
+#include "probe.h"
 #include "mem.h"
 #include "scanner.h"
 #include "log.h"
@@ -14,12 +15,19 @@ namespace rbx::off {
 Offsets g;
 using json = nlohmann::json;
 
-// Starter sig families. These rot weekly; re-derive at PC via x64dbg xref on
-// the strings "DataModel" / "FakeDataModel" / "print" and on the mov/lea into
-// a global pointer or vtable that lives there.
+// Starter sig families. These rot every few weeks; probe::All() self-verifies
+// everything downstream, so only this sig matters for the whole resolver to work.
+// Re-derive at PC with x64dbg: xref "DataModel" or "FakeDataModel" in .rdata,
+// follow to the `mov rax, [rip+disp]` that loads the global pointer.
 static const char* SIG_FAKE_DATAMODEL[] = {
+    // mov rax, [rip+disp]; mov rcx, [rax+off]; test rcx,rcx;
     "48 8B 05 ? ? ? ? 48 8B 88 ? ? ? ? 48 85 C9",
+    // sub rsp,X; mov rcx, [rip+disp]; test rcx,rcx; je X; mov rax,[rcx]
     "48 83 EC ? 48 8B 0D ? ? ? ? 48 85 C9 74 ? 48 8B 01",
+    // mov rcx, [rip+disp]; call X; mov rbx, rax — common in GetService path
+    "48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B D8 48 85 C0",
+    // lea rcx, [rip+disp]; mov [rax+off], rcx — FakeDataModel installer
+    "48 8D 0D ? ? ? ? 48 89 ? ? ? ? ? E8",
     nullptr
 };
 
@@ -134,29 +142,41 @@ bool Resolve() {
     if (!mod) { log::Err("RobloxPlayerBeta.exe module not found"); return false; }
 
     auto key = KeyOf(*mod);
-    if (TryLoadCache(key)) return true;
+    if (TryLoadCache(key)) {
+        // cache hit, but still run probe to validate against live memory and recover
+        // if something has shifted since the cache was written
+        if (!probe::All()) log::Warn("cache loaded but probe revalidate failed - will rescan");
+        else return true;
+    }
 
     auto [textBase, textSize] = scan::GetTextSection(mod->base);
     if (!textBase) { log::Err("could not parse .text"); return false; }
     log::Info("scanning .text base=0x%p size=0x%zX", (void*)textBase, textSize);
 
     g.FakeDataModelPtr = TrySigFamily(textBase, textSize, SIG_FAKE_DATAMODEL);
-    if (!g.FakeDataModelPtr) { log::Err("FakeDataModel sig rot"); return false; }
+    if (!g.FakeDataModelPtr) { log::Err("FakeDataModel: all sig families rot"); return false; }
 
-    // FILL: additional sig families for instance.Name offset, child vector offset,
-    // CFrame offset. Starter values come from the struct defaults; verify them via
-    // probe below.
+    // probe fills every downstream offset by walking live memory, self-verifying.
+    if (!probe::All()) { log::Err("probe chain failed - the game may not be in a place yet"); return false; }
+
     SaveCache();
     return true;
 }
 
 bool SanityProbe() {
     uintptr_t dm = mem::ExtRead<uintptr_t>(g.FakeDataModelPtr);
-    if (!dm) { log::Err("DataModel NULL (not in a place yet?)"); return true; /* soft */ }
+    if (!dm) { log::Err("DataModel NULL (not in a place yet?)"); return true; }
 
-    // walk to a known-named child and confirm Name
-    // FILL: wire this up once Resolve() populates inst.* reliably
-    log::Info("DataModel=0x%p", (void*)dm);
+    // Cheap consistency check: find Workspace via the just-resolved offsets.
+    if (!g.inst.Children || !g.inst.Name) { log::Warn("sanity: inst offsets unresolved"); return false; }
+    // Walk one level and count children.
+    uintptr_t vecPtr = mem::ExtRead<uintptr_t>(dm + g.inst.Children);
+    if (!vecPtr) { log::Err("sanity: DataModel children vec null"); return false; }
+    uintptr_t b = mem::ExtRead<uintptr_t>(vecPtr);
+    uintptr_t e = mem::ExtRead<uintptr_t>(vecPtr + 8);
+    if (!b || e <= b) { log::Err("sanity: DataModel children empty"); return false; }
+    size_t n = (e - b) / 16;
+    log::Info("sanity ok: DataModel=0x%p children=%zu", (void*)dm, n);
     return true;
 }
 

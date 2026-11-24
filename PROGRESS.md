@@ -9,12 +9,15 @@
 
 ## STATUS BOARD
 
-- [x] **S1** — plan, arch, offset strategy, overlay strategy, scanner code (this doc)
-- [x] **S3** — `shared/` complete: mem, scanner, wts, overlay (ImGui+D3D11), menu, config, log, math
-- [x] **S4** — `cs2-ext/` complete except offsets.json (NEEDS-PC) and schema-walk fallback stub
-- [x] **S5** — `rbx-ext/` complete: sig scanner, instance walker, player/esp/menu; sig families seeded (NEEDS-PC verification)
-- [ ] **S2 (at PC)** — dump CS2 offsets via cs2-dumper; verify/re-derive Roblox sigs against live module
-- [ ] **S6** — polish pass: skeleton ESP thread-through for CS2, WinHTTP cs2-dumper fetch, snapline tweaks, unified theme
+- [x] **S1** — plan, arch, offset strategy, overlay strategy, scanner code
+- [x] **S3** — `shared/` complete: mem, scanner, wts, overlay, menu, config, log, math
+- [x] **S4** — `cs2-ext/` complete; `offsets.json` bundled with current a2x/cs2-dumper main values
+- [x] **S5** — `rbx-ext/` core: sig scanner, instance walker, player/esp/menu
+- [x] **S5b** — `rbx-ext/probe.cpp` runtime offset self-resolver (Instance.Name/Children, ClassDescriptor, Camera CFrame/VP/FOV, BasePart.CFrame, LocalPlayer, Character, Humanoid)
+- [x] **S5c** — `rbx-ext/camera.cpp` proper Camera module (CFrame, WTS, forward/right/up, ray dist)
+- [x] **S5d** — `rbx-ext/skeleton.cpp` R6/R15 autodetect + limb/link tables
+- [ ] **S2 (at PC)** — build; verify cs2 offsets still resolve against your local CS2 build; confirm Roblox FakeDataModel sig against live module (probe handles the rest)
+- [ ] **S6** — polish: WinHTTP cs2-dumper fetch, CS2 skeleton ESP thread-through, visibility ray test, auto-reattach loop
 
 ## OPEN QUESTIONS (resolve at PC, not now)
 
