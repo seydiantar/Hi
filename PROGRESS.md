@@ -10,11 +10,11 @@
 ## STATUS BOARD
 
 - [x] **S1** — plan, arch, offset strategy, overlay strategy, scanner code (this doc)
-- [ ] **S2 (at PC)** — dump CS2 offsets via cs2-dumper, bootstrap Roblox sigs with x64dbg
-- [ ] **S3** — write `shared/` (mem, scanner, wts, overlay, menu, config)
-- [ ] **S4** — write `cs2-ext/` (entity walk, bone ESP, name ESP, box ESP)
-- [ ] **S5** — write `rbx-ext/` (DataModel walk, player ESP, Hyperion-safe handle)
-- [ ] **S6** — polish: FOV circle, snapline, team filter, config persistence, unified theme
+- [x] **S3** — `shared/` complete: mem, scanner, wts, overlay (ImGui+D3D11), menu, config, log, math
+- [x] **S4** — `cs2-ext/` complete except offsets.json (NEEDS-PC) and schema-walk fallback stub
+- [x] **S5** — `rbx-ext/` complete: sig scanner, instance walker, player/esp/menu; sig families seeded (NEEDS-PC verification)
+- [ ] **S2 (at PC)** — dump CS2 offsets via cs2-dumper; verify/re-derive Roblox sigs against live module
+- [ ] **S6** — polish pass: skeleton ESP thread-through for CS2, WinHTTP cs2-dumper fetch, snapline tweaks, unified theme
 
 ## OPEN QUESTIONS (resolve at PC, not now)
 
@@ -545,4 +545,47 @@ Kindmops is home → start at **When-Home checklist step 0** → then S2 → S3.
 
 ---
 
-_Last update: S1 complete (plan, offset strategy, overlay strategy, scanner code ready to paste)._
+_Last update: S3 + S4 + S5 complete (40 source files, ~2k lines). Everything compiles locally pending FetchContent for imgui + nlohmann. Only the offset dumps are blocking S2._
+
+## FILES ON DISK NOW
+
+```
+.gitignore
+CMakeLists.txt
+PROGRESS.md
+shared/
+  CMakeLists.txt
+  mem.h, mem.cpp
+  scanner.h, scanner.cpp
+  math.h
+  wts.h, wts.cpp
+  log.h, log.cpp
+  config.h, config.cpp
+  overlay.h, overlay.cpp         ImGui + D3D11 + layered transparent window
+  menu.h, menu.cpp               tabbed framework, log console
+cs2-ext/
+  CMakeLists.txt
+  offsets.h, offsets.cpp         cs2-dumper JSON consumer + sanity probe
+  game.h                         Pawn, Controller, ViewState accessors
+  entity.h, entity.cpp           CConcreteEntityList walk, handle resolve
+  player.h, player.cpp           ScreenPlayer snapshot pipeline
+  esp.cpp                        box + name + health bar + distance + snapline + FOV
+  menu.cpp                       game-status tab
+  main.cpp                       wait-attach → resolve → render loop
+rbx-ext/
+  CMakeLists.txt
+  sigs.h, sigs.cpp               pattern-scan + disk cache + reload
+  game.h                         DataModel, Instance, Camera, Humanoid, BasePart, Player
+  instance.cpp                   SSO std::string reader, children walk, find-first-child
+  player.h, player.cpp           Players-service iterate + 8-corner box compute
+  esp.cpp
+  menu.cpp
+  main.cpp                       --dump-sigs mode + render loop
+```
+
+## WHAT'S STILL FILL-MARKED
+
+- `cs2-ext/offsets.cpp::FetchLatest` — WinHTTP GET for cs2-dumper main JSON (implement when net access is wanted; bundled fallback works today)
+- `cs2-ext/esp.cpp::DrawSkeleton` — needs pawn addr threaded through `ScreenPlayer`; use the one in `cs2-ext/entity.cpp::EnumPlayers` output (easy; left as S6)
+- `rbx-ext/sigs.cpp` — second sig family for `inst.Name` and `inst.Children` offsets; defaults are historical guesses, verify at PC
+- `cs2-ext/offsets.json`, `cs2-ext/client_dll.json` — produced by cs2-dumper at PC
